@@ -2,87 +2,63 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador KMZ - Local</title>
-    
-    <!-- 1. Estilos de Leaflet -->
+    <title>KMZ Finder - Cloudflare</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f9; }
-        #map { 
-            height: 600px; 
-            width: 100%; 
-            border-radius: 8px; 
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            background: #e0e0e0; /* Color de fondo mientras carga */
-        }
-        .controls { 
-            margin-bottom: 20px; 
-            padding: 15px; 
-            background: white; 
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        input[type="file"] {
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; }
+        #map { flex-grow: 1; width: 100%; }
     </style>
 </head>
 <body>
 
     <div class="controls">
-        <strong>Selecciona tu archivo KMZ:</strong>
+        <strong>Subir KMZ: </strong>
         <input type="file" id="fileInput" accept=".kmz" />
     </div>
     
     <div id="map"></div>
 
-    <!-- 2. Scripts en orden de dependencia estricto -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://unpkg.com/leaflet-kmz@1.0.8/dist/leaflet-kmz.js"></script>
 
     <script>
-            document.addEventListener('DOMContentLoaded', function() {
-            // 1. Inicializar mapa
-            var map = L.map('map').setView([25.0, -100.0], 5);
+        document.addEventListener('DOMContentLoaded', function() {
+            var map = L.map('map').setView([25.68, -100.31], 5); // Centrado inicial
+
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
+                attribution: '&copy; OpenStreetMap'
             }).addTo(map);
-        
-            // 2. Crear el receptor de KMZ
+
+            // Configuramos el plugin con opciones de control
             var kmz = L.kmzLayer().addTo(map);
-        
-            // 3. Manejar la subida del archivo
+
             document.getElementById('fileInput').addEventListener('change', function (e) {
                 var file = e.target.files[0];
                 if (!file) return;
-        
-                // SOLUCIÓN AL ERROR e.split: 
-                // Creamos una URL temporal para el archivo local
-                var reader = new FileReader();
+
+                // Creamos la URL del objeto para que el plugin lo procese como string
                 var blobUrl = URL.createObjectURL(file);
-        
-                try {
-                    // Pasamos la URL temporal al plugin en lugar del contenido binario
-                    kmz.load(blobUrl);
-                    
-                    // Auto-zoom cuando cargue
-                    kmz.on('load', function(e) {
-                        map.fitBounds(e.layer.getBounds());
-                        // Liberamos la memoria de la URL temporal
-                        URL.revokeObjectURL(blobUrl);
-                    });
-                    
-                } catch (err) {
-                    console.error("Error al cargar KMZ:", err);
-                    URL.revokeObjectURL(blobUrl);
-                }
+
+                // Limpiamos capas previas para evitar conflictos de coordenadas
+                kmz.clearLayers();
+
+                // Cargamos el archivo
+                kmz.load(blobUrl);
+
+                // Manejo de errores y centrado seguro
+                kmz.on('load', function(e) {
+                    try {
+                        var bounds = e.layer.getBounds();
+                        if (bounds.isValid()) { // Verificación clave para evitar el error de image_d9f2bc.jpg
+                            map.fitBounds(bounds);
+                        }
+                    } catch (err) {
+                        console.warn("No se pudo obtener límites automáticos, pero los datos deberían estar ahí.");
+                    }
+                    URL.revokeObjectURL(blobUrl); // Limpieza de memoria
+                });
             });
         });
     </script>
