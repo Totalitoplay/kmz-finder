@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>KMZ Finder - Cloudflare</title>
+    <title>KMZ Finder</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
@@ -11,60 +11,77 @@
     </style>
 </head>
 <body>
-
     <div class="controls">
         <strong>Subir KMZ: </strong>
         <input type="file" id="fileInput" accept=".kmz" />
     </div>
-    
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="https://unpkg.com/leaflet-kmz@1.0.8/dist/leaflet-kmz.js"></script>
-
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-        // 1. Inicializar mapa
         var map = L.map('map').setView([25.68, -100.31], 5);
-    
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap'
         }).addTo(map);
-    
-        // 2. Configurar el plugin KMZ con un manejador de errores interno
-        var kmz = L.kmzLayer().addTo(map);
-    
-        // 3. Manejar la subida del archivo
-        document.getElementById('fileInput').addEventListener('change', function (e) {
+
+        var layerGroup = L.layerGroup().addTo(map);
+
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
             var file = e.target.files[0];
             if (!file) return;
-    
-            // Limpiar capas previas para evitar que el error se arrastre
-            kmz.clearLayers();
-    
-            var blobUrl = URL.createObjectURL(file);
-    
-            // Escuchamos el evento 'load' ANTES de cargar para estar listos
-            kmz.on('load', function(e) {
-                try {
-                    // Verificamos si la capa tiene límites válidos antes de hacer zoom
-                    if (e.layer && typeof e.layer.getBounds === 'function') {
-                        var bounds = e.layer.getBounds();
-                        if (bounds.isValid()) {
-                            map.fitBounds(bounds);
-                        }
-                    }
-                } catch (err) {
-                    console.warn("Error silencioso al ajustar límites:", err);
-                }
-                URL.revokeObjectURL(blobUrl);
+
+            layerGroup.clearLayers();
+
+            const zip = await JSZip.loadAsync(file);
+
+            // Buscar el .kml dentro del zip
+            const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
+            if (!kmlFile) { alert('No se encontró KML dentro del KMZ'); return; }
+
+            const kmlText = await kmlFile.async('string');
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+
+            const layers = [];
+
+            // Parsear Placemarks
+            kmlDoc.querySelectorAll('Placemark').forEach(placemark => {
+                // Polígonos
+                placemark.querySelectorAll('Polygon').forEach(poly => {
+                    const coords = parseCoords(poly.querySelector('outerBoundaryIs coordinates'));
+                    if (coords.length) layers.push(L.polygon(coords));
+                });
+
+                // Líneas
+                placemark.querySelectorAll('LineString').forEach(line => {
+                    const coords = parseCoords(line.querySelector('coordinates'));
+                    if (coords.length) layers.push(L.polyline(coords));
+                });
+
+                // Puntos
+                placemark.querySelectorAll('Point').forEach(point => {
+                    const coords = parseCoords(point.querySelector('coordinates'));
+                    if (coords.length) layers.push(L.marker(coords[0]));
+                });
             });
-    
-            // Cargamos el archivo
-            kmz.load(blobUrl);
+
+            if (!layers.length) { alert('No se encontraron geometrías válidas'); return; }
+
+            layers.forEach(l => layerGroup.addLayer(l));
+            map.fitBounds(layerGroup.getBounds());
         });
-    });
+
+        function parseCoords(el) {
+            if (!el || !el.textContent) return [];
+            return el.textContent.trim().split(/\s+/)
+                .map(c => {
+                    const parts = c.split(',').map(Number);
+                    if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+                    return [parts[1], parts[0]]; // lat, lng
+                })
+                .filter(Boolean);
+        }
     </script>
 </body>
 </html>
