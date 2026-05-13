@@ -48,54 +48,41 @@
     <script src="https://unpkg.com/leaflet-kmz@1.0.8/dist/leaflet-kmz.js"></script>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Inicializar mapa
-            var map = L.map('map').setView([25.0, -100.0], 5); // Centrado inicial en México
-
-            // Capa base de OpenStreetMap
+            document.addEventListener('DOMContentLoaded', function() {
+            // 1. Inicializar mapa
+            var map = L.map('map').setView([25.0, -100.0], 5);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
-
-            // Crear el receptor de KMZ
-            // Usamos una estructura de control para evitar errores si el plugin carga lento
-            var kmz;
-            try {
-                kmz = L.kmzLayer().addTo(map);
-                console.log("Plugin KMZ cargado correctamente.");
-            } catch (err) {
-                console.error("Error al iniciar el plugin KMZ:", err);
-                alert("Hubo un error cargando el plugin de mapas. Revisa la consola.");
-            }
-
-            // Manejar la subida del archivo
+        
+            // 2. Crear el receptor de KMZ
+            var kmz = L.kmzLayer().addTo(map);
+        
+            // 3. Manejar la subida del archivo
             document.getElementById('fileInput').addEventListener('change', function (e) {
                 var file = e.target.files[0];
-                
                 if (!file) return;
-
+        
+                // SOLUCIÓN AL ERROR e.split: 
+                // Creamos una URL temporal para el archivo local
                 var reader = new FileReader();
-                
-                reader.onload = function(event) {
-                    try {
-                        // Limpiar capas anteriores si deseas solo ver uno a la vez
-                        // kmz.clearLayers(); 
-                        
-                        kmz.load(event.target.result);
-                        
-                        // Evento para centrar el mapa automáticamente al cargar
-                        kmz.on('load', function(e) {
-                            map.fitBounds(e.layer.getBounds());
-                        });
-                        
-                    } catch (loadError) {
-                        console.error("Error al procesar el archivo:", loadError);
-                        alert("No se pudo procesar el archivo KMZ.");
-                    }
-                };
-
-                // Leer como ArrayBuffer (necesario para archivos binarios como KMZ)
-                reader.readAsArrayBuffer(file);
+                var blobUrl = URL.createObjectURL(file);
+        
+                try {
+                    // Pasamos la URL temporal al plugin en lugar del contenido binario
+                    kmz.load(blobUrl);
+                    
+                    // Auto-zoom cuando cargue
+                    kmz.on('load', function(e) {
+                        map.fitBounds(e.layer.getBounds());
+                        // Liberamos la memoria de la URL temporal
+                        URL.revokeObjectURL(blobUrl);
+                    });
+                    
+                } catch (err) {
+                    console.error("Error al cargar KMZ:", err);
+                    URL.revokeObjectURL(blobUrl);
+                }
             });
         });
     </script>
