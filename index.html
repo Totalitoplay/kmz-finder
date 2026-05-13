@@ -25,42 +25,46 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            var map = L.map('map').setView([25.68, -100.31], 5); // Centrado inicial
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap'
-            }).addTo(map);
-
-            // Configuramos el plugin con opciones de control
-            var kmz = L.kmzLayer().addTo(map);
-
-            document.getElementById('fileInput').addEventListener('change', function (e) {
-                var file = e.target.files[0];
-                if (!file) return;
-
-                // Creamos la URL del objeto para que el plugin lo procese como string
-                var blobUrl = URL.createObjectURL(file);
-
-                // Limpiamos capas previas para evitar conflictos de coordenadas
-                kmz.clearLayers();
-
-                // Cargamos el archivo
-                kmz.load(blobUrl);
-
-                // Manejo de errores y centrado seguro
-                kmz.on('load', function(e) {
-                    try {
+        // 1. Inicializar mapa
+        var map = L.map('map').setView([25.68, -100.31], 5);
+    
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+    
+        // 2. Configurar el plugin KMZ con un manejador de errores interno
+        var kmz = L.kmzLayer().addTo(map);
+    
+        // 3. Manejar la subida del archivo
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+            var file = e.target.files[0];
+            if (!file) return;
+    
+            // Limpiar capas previas para evitar que el error se arrastre
+            kmz.clearLayers();
+    
+            var blobUrl = URL.createObjectURL(file);
+    
+            // Escuchamos el evento 'load' ANTES de cargar para estar listos
+            kmz.on('load', function(e) {
+                try {
+                    // Verificamos si la capa tiene límites válidos antes de hacer zoom
+                    if (e.layer && typeof e.layer.getBounds === 'function') {
                         var bounds = e.layer.getBounds();
-                        if (bounds.isValid()) { // Verificación clave para evitar el error de image_d9f2bc.jpg
+                        if (bounds.isValid()) {
                             map.fitBounds(bounds);
                         }
-                    } catch (err) {
-                        console.warn("No se pudo obtener límites automáticos, pero los datos deberían estar ahí.");
                     }
-                    URL.revokeObjectURL(blobUrl); // Limpieza de memoria
-                });
+                } catch (err) {
+                    console.warn("Error silencioso al ajustar límites:", err);
+                }
+                URL.revokeObjectURL(blobUrl);
             });
+    
+            // Cargamos el archivo
+            kmz.load(blobUrl);
         });
+    });
     </script>
 </body>
 </html>
