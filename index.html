@@ -6,30 +6,41 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; display: flex; align-items: center; gap: 15px; }
-        #map { flex-grow: 1; width: 100%; }
+        .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .controls select { padding: 6px 10px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; }
+        .controls input[type="file"] { font-size: 13px; }
         #status { font-size: 13px; opacity: 0.8; }
+        #map { flex-grow: 1; width: 100%; }
     </style>
 </head>
 <body>
     <div class="controls">
-        <strong>Subir KMZ: </strong>
+        <strong>KMZ:</strong>
+        <select id="kmzSelect">
+            <option value="">-- Seleccionar --</option>
+            <option value="ALDAMA_1.kmz" selected>Aldama 1</option>
+            <!-- Agrega aquí más archivos: -->
+            <!-- <option value="OTRO.kmz">Otro nombre</option> -->
+        </select>
+        <span style="opacity:0.4">|</span>
+        <span style="font-size:13px">o sube uno:</span>
         <input type="file" id="fileInput" accept=".kmz" />
-        <span id="status">Cargando ALDAMA_1.kmz...</span>
+        <span id="status"></span>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
+        const BASE_URL = 'https://github.com/Totalitoplay/kmz-finder/raw/refs/heads/main/';
+
         var map = L.map('map').setView([25.68, -100.31], 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
         var layerGroup = L.layerGroup().addTo(map);
-
-        const DEFAULT_KMZ = 'https://raw.githubusercontent.com/Totalitoplay/kmz-finder/main/ALDAMA_1.kmz';
+        const status = document.getElementById('status');
 
         async function loadKMZFromArrayBuffer(buffer) {
             const zip = await JSZip.loadAsync(buffer);
@@ -56,9 +67,9 @@
                 if (id && styleUrl) styles['#' + id] = styles[styleUrl] || {};
             });
 
-            function kmlColorToHex(kmlColor) {
-                if (!kmlColor || kmlColor.length < 8) return null;
-                return '#' + kmlColor.slice(6, 8) + kmlColor.slice(4, 6) + kmlColor.slice(2, 4);
+            function kmlColorToHex(c) {
+                if (!c || c.length < 8) return null;
+                return '#' + c.slice(6, 8) + c.slice(4, 6) + c.slice(2, 4);
             }
 
             const layers = [];
@@ -93,12 +104,9 @@
                 placemark.querySelectorAll('Point').forEach(point => {
                     const coords = parseCoords(point.querySelector('coordinates'));
                     if (!coords.length) return;
-                    let marker;
-                    if (style.iconHref) {
-                        marker = L.marker(coords[0], { icon: L.icon({ iconUrl: style.iconHref, iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32] }) });
-                    } else {
-                        marker = L.marker(coords[0]);
-                    }
+                    const marker = style.iconHref
+                        ? L.marker(coords[0], { icon: L.icon({ iconUrl: style.iconHref, iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32] }) })
+                        : L.marker(coords[0]);
                     marker.bindPopup(popup);
                     if (name) marker.bindTooltip(name, { permanent: false, direction: 'top' });
                     layers.push(marker);
@@ -120,30 +128,36 @@
             }).filter(Boolean);
         }
 
-        // Precargar desde GitHub
-        const status = document.getElementById('status');
-        fetch(DEFAULT_KMZ)
-            .then(r => {
+        async function loadFromURL(filename) {
+            status.textContent = `Cargando ${filename}...`;
+            try {
+                const r = await fetch(BASE_URL + filename);
                 if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.arrayBuffer();
-            })
-            .then(buf => {
-                status.textContent = 'ALDAMA_1.kmz cargado ✓';
-                return loadKMZFromArrayBuffer(buf);
-            })
-            .catch(err => {
-                status.textContent = 'Error al cargar: ' + err.message;
-            });
+                const buf = await r.arrayBuffer();
+                await loadKMZFromArrayBuffer(buf);
+                status.textContent = `${filename} cargado ✓`;
+            } catch (err) {
+                status.textContent = 'Error: ' + err.message;
+            }
+        }
 
-        // También permite subir manualmente
+        // Selector
+        document.getElementById('kmzSelect').addEventListener('change', function() {
+            if (this.value) loadFromURL(this.value);
+        });
+
+        // Subida manual
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
-            status.textContent = 'Cargando ' + file.name + '...';
+            status.textContent = `Cargando ${file.name}...`;
             const buf = await file.arrayBuffer();
             await loadKMZFromArrayBuffer(buf);
-            status.textContent = file.name + ' cargado ✓';
+            status.textContent = `${file.name} cargado ✓`;
         });
+
+        // Cargar el default
+        loadFromURL('ALDAMA_1.kmz');
     </script>
 </body>
 </html>
