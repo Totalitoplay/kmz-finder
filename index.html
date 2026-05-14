@@ -6,14 +6,16 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; }
+        .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; display: flex; align-items: center; gap: 15px; }
         #map { flex-grow: 1; width: 100%; }
+        #status { font-size: 13px; opacity: 0.8; }
     </style>
 </head>
 <body>
     <div class="controls">
         <strong>Subir KMZ: </strong>
         <input type="file" id="fileInput" accept=".kmz" />
+        <span id="status">Cargando ALDAMA_1.kmz...</span>
     </div>
     <div id="map"></div>
 
@@ -27,19 +29,16 @@
 
         var layerGroup = L.layerGroup().addTo(map);
 
-        document.getElementById('fileInput').addEventListener('change', async function(e) {
-            var file = e.target.files[0];
-            if (!file) return;
-            layerGroup.clearLayers();
+        const DEFAULT_KMZ = 'https://github.com/Totalitoplay/kmz-finder/raw/refs/heads/main/ALDAMA_1.kmz';
 
-            const zip = await JSZip.loadAsync(file);
+        async function loadKMZFromArrayBuffer(buffer) {
+            const zip = await JSZip.loadAsync(buffer);
             const kmlFile = Object.values(zip.files).find(f => f.name.endsWith('.kml'));
             if (!kmlFile) { alert('No se encontró KML'); return; }
 
             const kmlText = await kmlFile.async('string');
             const kmlDoc = new DOMParser().parseFromString(kmlText, 'text/xml');
 
-            // Extraer estilos del KML
             const styles = {};
             kmlDoc.querySelectorAll('Style').forEach(style => {
                 const id = style.getAttribute('id');
@@ -50,22 +49,16 @@
                 styles['#' + id] = { iconHref, lineColor, polyColor };
             });
 
-            // Resolver StyleMap
             kmlDoc.querySelectorAll('StyleMap').forEach(sm => {
                 const id = sm.getAttribute('id');
-                const normalKey = [...sm.querySelectorAll('Pair')]
-                    .find(p => p.querySelector('key')?.textContent === 'normal');
+                const normalKey = [...sm.querySelectorAll('Pair')].find(p => p.querySelector('key')?.textContent === 'normal');
                 const styleUrl = normalKey?.querySelector('styleUrl')?.textContent?.trim();
                 if (id && styleUrl) styles['#' + id] = styles[styleUrl] || {};
             });
 
             function kmlColorToHex(kmlColor) {
-                // KML color: aabbggrr
                 if (!kmlColor || kmlColor.length < 8) return null;
-                const r = kmlColor.slice(6, 8);
-                const g = kmlColor.slice(4, 6);
-                const b = kmlColor.slice(2, 4);
-                return '#' + r + g + b;
+                return '#' + kmlColor.slice(6, 8) + kmlColor.slice(4, 6) + kmlColor.slice(2, 4);
             }
 
             const layers = [];
@@ -75,10 +68,8 @@
                 const desc = placemark.querySelector('description')?.textContent?.trim() || '';
                 const styleUrl = placemark.querySelector('styleUrl')?.textContent?.trim();
                 const style = styles[styleUrl] || {};
-
                 const popup = `<b>${name}</b>${desc ? '<br>' + desc : ''}`;
 
-                // Polígonos
                 placemark.querySelectorAll('Polygon').forEach(poly => {
                     const coords = parseCoords(poly.querySelector('outerBoundaryIs coordinates'));
                     if (!coords.length) return;
@@ -89,7 +80,6 @@
                     layers.push(layer);
                 });
 
-                // Líneas
                 placemark.querySelectorAll('LineString').forEach(line => {
                     const coords = parseCoords(line.querySelector('coordinates'));
                     if (!coords.length) return;
@@ -100,34 +90,26 @@
                     layers.push(layer);
                 });
 
-                // Puntos
                 placemark.querySelectorAll('Point').forEach(point => {
                     const coords = parseCoords(point.querySelector('coordinates'));
                     if (!coords.length) return;
-
                     let marker;
                     if (style.iconHref) {
-                        const icon = L.icon({
-                            iconUrl: style.iconHref,
-                            iconSize: [32, 32],
-                            iconAnchor: [16, 32],
-                            popupAnchor: [0, -32]
-                        });
-                        marker = L.marker(coords[0], { icon });
+                        marker = L.marker(coords[0], { icon: L.icon({ iconUrl: style.iconHref, iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -32] }) });
                     } else {
                         marker = L.marker(coords[0]);
                     }
-
                     marker.bindPopup(popup);
                     if (name) marker.bindTooltip(name, { permanent: false, direction: 'top' });
                     layers.push(marker);
                 });
             });
 
+            layerGroup.clearLayers();
             if (!layers.length) { alert('Sin geometrías válidas'); return; }
             layers.forEach(l => layerGroup.addLayer(l));
             map.fitBounds(layerGroup.getBounds());
-        });
+        }
 
         function parseCoords(el) {
             if (!el?.textContent) return [];
@@ -137,6 +119,31 @@
                 return [p[1], p[0]];
             }).filter(Boolean);
         }
+
+        // Precargar desde GitHub
+        const status = document.getElementById('status');
+        fetch(DEFAULT_KMZ)
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.arrayBuffer();
+            })
+            .then(buf => {
+                status.textContent = 'ALDAMA_1.kmz cargado ✓';
+                return loadKMZFromArrayBuffer(buf);
+            })
+            .catch(err => {
+                status.textContent = 'Error al cargar: ' + err.message;
+            });
+
+        // También permite subir manualmente
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            status.textContent = 'Cargando ' + file.name + '...';
+            const buf = await file.arrayBuffer();
+            await loadKMZFromArrayBuffer(buf);
+            status.textContent = file.name + ' cargado ✓';
+        });
     </script>
 </body>
 </html>
