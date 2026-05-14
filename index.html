@@ -9,6 +9,9 @@
         .controls { padding: 15px; background: #2c3e50; color: white; z-index: 1000; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
         .controls select { padding: 6px 10px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; }
         .controls input[type="file"] { font-size: 13px; }
+        .controls input[type="text"] { padding: 6px 10px; border-radius: 6px; border: none; font-size: 13px; width: 130px; }
+        .controls button { padding: 6px 12px; border-radius: 6px; border: none; background: #e67e22; color: white; font-size: 13px; cursor: pointer; }
+        .controls button:hover { background: #d35400; }
         #status { font-size: 13px; opacity: 0.8; }
         #map { flex-grow: 1; width: 100%; }
     </style>
@@ -18,14 +21,16 @@
         <strong>KMZ:</strong>
         <select id="kmzSelect">
             <option value="">-- Seleccionar --</option>
-            <option value="ALDAMA_1.kmz" selected>Aldama 1</option>
-            <option value="ALDAMA_2.kmz" selected>Aldama 2</option>
-            <!-- Agrega aquí más archivos: -->
-            <!-- <option value="OTRO.kmz">Otro nombre</option> -->
+            <option value="ALDAMA_1.kmz">Aldama 1</option>
+            <option value="ALDAMA_2.kmz">Aldama 2</option>
         </select>
         <span style="opacity:0.4">|</span>
-        <span style="font-size:13px">o sube uno:</span>
+        <span style="font-size:13px">Sube uno:</span>
         <input type="file" id="fileInput" accept=".kmz" />
+        <span style="opacity:0.4">|</span>
+        <input type="text" id="latInput" placeholder="Latitud" />
+        <input type="text" id="lngInput" placeholder="Longitud" />
+        <button id="goBtn">📍 Ir</button>
         <span id="status"></span>
     </div>
     <div id="map"></div>
@@ -35,14 +40,40 @@
     <script>
         const BASE_URL = 'https://api.allorigins.win/raw?url=https://raw.githubusercontent.com/Totalitoplay/kmz-finder/main/';
 
-
         var map = L.map('map').setView([25.68, -100.31], 5);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap'
         }).addTo(map);
 
         var layerGroup = L.layerGroup().addTo(map);
+        var coordMarker = null;
         const status = document.getElementById('status');
+
+        // Ir a coordenadas
+        document.getElementById('goBtn').addEventListener('click', function() {
+            const lat = parseFloat(document.getElementById('latInput').value);
+            const lng = parseFloat(document.getElementById('lngInput').value);
+            if (isNaN(lat) || isNaN(lng)) { status.textContent = 'Coordenadas inválidas'; return; }
+
+            if (coordMarker) map.removeLayer(coordMarker);
+            coordMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: '',
+                    html: '<div style="background:#e67e22;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,0.5)"></div>',
+                    iconAnchor: [7, 7]
+                })
+            }).addTo(map);
+            coordMarker.bindPopup(`<b>📍 Punto</b><br>Lat: ${lat}<br>Lng: ${lng}`).openPopup();
+            map.setView([lat, lng], 14);
+            status.textContent = `Ir a (${lat}, ${lng}) ✓`;
+        });
+
+        // Enter en los inputs
+        ['latInput','lngInput'].forEach(id => {
+            document.getElementById(id).addEventListener('keydown', e => {
+                if (e.key === 'Enter') document.getElementById('goBtn').click();
+            });
+        });
 
         async function loadKMZFromArrayBuffer(buffer) {
             const zip = await JSZip.loadAsync(buffer);
@@ -143,12 +174,10 @@
             }
         }
 
-        // Selector
         document.getElementById('kmzSelect').addEventListener('change', function() {
             if (this.value) loadFromURL(this.value);
         });
 
-        // Subida manual
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -158,7 +187,6 @@
             status.textContent = `${file.name} cargado ✓`;
         });
 
-        // Cargar el default
         loadFromURL('ALDAMA_1.kmz');
     </script>
 </body>
