@@ -29,7 +29,7 @@
 
         var layerGroup = L.layerGroup().addTo(map);
 
-        const DEFAULT_KMZ = 'https://github.com/Totalitoplay/kmz-finder/raw/refs/heads/main/ALDAMA_1.kmz';
+        const DEFAULT_KMZ = 'https://raw.githubusercontent.com/Totalitoplay/kmz-finder/main/ALDAMA_1.kmz';
 
         async function loadKMZFromArrayBuffer(buffer) {
             const zip = await JSZip.loadAsync(buffer);
